@@ -1,0 +1,36 @@
+# to read the authorization bearer token
+$token = Read-Host "Enter your token"
+# to get the org needed(eg: apigee-cnb-dev)
+$ORGNAME = Read-Host "Enter the org"
+$baseurl = "https://apigee.googleapis.com/v1/organizations/$ORGNAME/environments"
+$ENVS = Invoke-RestMethod -Uri $baseurl -Headers @{"Authorization" = "Bearer $token"} -SkipCertificateCheck
+
+# to convert the json array from the output to PowerShell array
+$ENVS_ARRAY = $ENVS | ForEach-Object { $_ -replace '^\[\s*|\s*\]$' }
+
+# to iterate through each env and get the envs
+foreach ($env in $ENVS_ARRAY) {
+    $env = $env.Trim()
+    $Targets = Invoke-RestMethod -Uri "$baseurl/$env/targetservers" -Headers @{"Authorization" = "Bearer $token"} -SkipCertificateCheck
+    Write-Host "$env:"
+    $Targets_ARRAY = $Targets | ForEach-Object { $_ -replace '^\[\s*|\s*\]$' }
+    
+    # iterate through each environment and to get the list of target servers
+    foreach ($target in $Targets_ARRAY) {
+        $target = $target -replace '"', ''
+        $targetservers = Invoke-RestMethod -Uri "$baseurl/$env/targetservers/$target" -Headers @{"Authorization" = "Bearer $token"} -SkipCertificateCheck
+        
+        # if the target server has mtls enabled, the sslInfo.clientAuthEnabled will be set as true, hence the result is set as true
+        if ($targetservers.sslInfo.clientAuthEnabled -eq "true") {
+            $result = $targetservers.name
+            $keyStore = $targetservers.sslInfo.keyStore
+            $keyAlias = $targetservers.sslInfo.keyAlias
+            $trustStore = $targetservers.sslInfo.trustStore
+            Write-Host "$result - keyStore: $keyStore, keyAlias: $keyAlias, trustStore: $trustStore"
+        }
+        else {
+            # $result = $targetservers.name
+            # Write-Host "$result - has no mtls"
+        }
+    }
+}
